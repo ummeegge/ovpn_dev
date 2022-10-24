@@ -15,7 +15,6 @@ usr/sbin/openvpn-authenticator
 #usr/share/doc/openvpn/COPYRIGHT.GPL
 #usr/share/doc/openvpn/Changes.rst
 #usr/share/doc/openvpn/README
-#usr/share/doc/openvpn/README.IPv6
 #usr/share/doc/openvpn/README.auth-pam
 #usr/share/doc/openvpn/README.down-root
 #usr/share/doc/openvpn/README.mbedtls
