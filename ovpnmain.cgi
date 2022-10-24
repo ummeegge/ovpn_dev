@@ -80,6 +80,7 @@ my $name;
 my $col="";
 my $local_serverconf = "${General::swroot}/ovpn/scripts/server.conf.local";
 my $local_clientconf = "${General::swroot}/ovpn/scripts/client.conf.local";
+my @advcipherchar=();
 
 &General::readhash("${General::swroot}/ethernet/settings", \%netsettings);
 $cgiparams{'ENABLED'} = 'off';
@@ -103,6 +104,7 @@ $cgiparams{'number'} = '';
 $cgiparams{'DCIPHER'} = '';
 $cgiparams{'DAUTH'} = '';
 $cgiparams{'TLSAUTH'} = '';
+$cgiparams{'DATACIPHERS'} = '';
 $routes_push_file = "${General::swroot}/ovpn/routes_push";
 # Perform crypto and configration test
 &pkiconfigcheck;
@@ -342,7 +344,12 @@ sub writeserverconf {
     }
     print CONF "status-version 1\n";
     print CONF "status /var/run/ovpnserver.log 30\n";
-    print CONF "ncp-disable\n";
+
+	# Data channel encryption
+	# Set seperator ':' for data ciphers
+	@advcipherchar = ($sovpnsettings{'DATACIPHERS'} =~ s/\|/:/g);
+	print CONF "data-ciphers $sovpnsettings{'DATACIPHERS'}\n";
+
     print CONF "cipher $sovpnsettings{DCIPHER}\n";
 	print CONF "auth $sovpnsettings{'DAUTH'}\n";
     # Set TLSv2 as minimum
@@ -824,6 +831,7 @@ if ($cgiparams{'ACTION'} eq $Lang::tr{'save-adv-options'}) {
     $vpnsettings{'DHCP_DNS'} = $cgiparams{'DHCP_DNS'};
     $vpnsettings{'DHCP_WINS'} = $cgiparams{'DHCP_WINS'};
     $vpnsettings{'ROUTES_PUSH'} = $cgiparams{'ROUTES_PUSH'};
+    $vpnsettings{'DATACIPHERS'} = $cgiparams{'DATACIPHERS'};
     my @temp=();
 
     if ($cgiparams{'FRAGMENT'} eq '') {
@@ -2411,6 +2419,12 @@ else
 	$zip->addFile( "${General::swroot}/ovpn/certs/$confighash{$cgiparams{'KEY'}}[1]cert.pem", "$confighash{$cgiparams{'KEY'}}[1]cert.pem") or die "Can't add file $confighash{$cgiparams{'KEY'}}[1]cert.pem\n";
     }
     print CLIENTCONF "cipher $vpnsettings{DCIPHER}\r\n";
+
+    # Data cipher negotiation
+	# Set seperator ':' for --data-ciphers algorithms
+	@advcipherchar = ($vpnsettings{'DATACIPHERS'} =~ s/\|/:/g);
+	print CLIENTCONF "data-ciphers $vpnsettings{'DATACIPHERS'}\r\n";
+
 	print CLIENTCONF "auth $vpnsettings{'DAUTH'}\r\n";
 
     if ($vpnsettings{'TLSAUTH'} eq 'on') {
@@ -2758,6 +2772,7 @@ END
     %cahash = ();
     %confighash = ();
     my $disabled;
+    my @temp=();
     &General::readhash("${General::swroot}/ovpn/settings", \%cgiparams);
     read_routepushfile;
 
@@ -2766,6 +2781,18 @@ END
 #	$cgiparams{'CLIENT2CLIENT'} =  'on';
 #    }
 ADV_ERROR:
+
+	# Set default data channel ciphers
+	if ($cgiparams{'DATACIPHERS'} eq '') {
+		$cgiparams{'DATACIPHERS'} = 'AES-256-GCM|ChaCha20-Poly1305';
+	}
+	$checked{'DATACIPHERS'}{'AES-256-GCM'} = '';
+	$checked{'DATACIPHERS'}{'AES-192-GCM'} = '';
+	$checked{'DATACIPHERS'}{'AES-128-GCM'} = '';
+	$checked{'DATACIPHERS'}{'ChaCha20-Poly1305'} = '';
+	@temp = split('\|', $cgiparams{'DATACIPHERS'});
+	foreach my $key (@temp) {$checked{'DATACIPHERS'}{$key} = "selected='selected'"; }
+
     if ($cgiparams{'MAX_CLIENTS'} eq '') {
 		$cgiparams{'MAX_CLIENTS'} =  '100';
     }
@@ -2820,9 +2847,48 @@ ADV_ERROR:
 	&Header::closebox();
     }
     &Header::openbox('100%', 'LEFT', $Lang::tr{'advanced server'});
+	print "<form method='post' enctype='multipart/form-data' action='$ENV{'SCRIPT_NAME'}'>";
+	print<<END
+
+	<form method='post' enctype='multipart/form-data' action='$ENV{'SCRIPT_NAME'}'>
+	<input type='hidden' name='KEY' value='$cgiparams{'KEY'}' />
+
+	<table width='100%'>
+		<tr>
+			<td style='width:18em'><b>$Lang::tr{'ovpn advanced encryption'}</b></td>
+		</tr>
+	</table>
+
+	<div class="ADVANCED_ENCRYPTION">
+		<table width='100%'>
+			<thead>
+				<tr>
+					<th width="15%"></th>
+					<th>$Lang::tr{'ovpn data channel'}</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td class='boldbase' width="24%">$Lang::tr{'ovpn data encryption'}</td>
+					<td class='boldbase'>
+						<select name='DATACIPHERS' multiple='multiple' size='6' style='width: 100%'>
+							<option value='ChaCha20-Poly1305' $checked{'DATACIPHERS'}{'ChaCha20-Poly1305'}>256 bit ChaCha20-Poly1305</option>
+							<option value='AES-256-GCM' $checked{'DATACIPHERS'}{'AES-256-GCM'}>256 $Lang::tr{'bit'} AES-GCM</option>
+							<option value='AES-192-GCM' $checked{'DATACIPHERS'}{'AES-192-GCM'}>192 $Lang::tr{'bit'} AES-GCM</option>
+							<option value='AES-128-GCM' $checked{'DATACIPHERS'}{'AES-128-GCM'}>128 $Lang::tr{'bit'} AES-GCM</option>
+						</select>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+END
+;
+
     print <<END;
     <form method='post' enctype='multipart/form-data'>
 <table width='100%' border=0>
+	<hr>
 	<tr>
 		<td colspan='4'><b>$Lang::tr{'dhcp-options'}</b></td>
     </tr>
